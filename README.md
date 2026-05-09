@@ -1,5 +1,7 @@
 # 🌦️ Nimbus Weather Card
 
+![Nimbus Weather Card](https://github.com/maxfok/nimbus-weather-card/raw/main/Screen_Recording_2026-05-09_at_7_59_24_AM.gif)
+
 A beautiful, Apple Weather‑inspired custom card for Home Assistant with smooth particle effects, dynamic backgrounds, and full moon phase support.
 
 🔗 **GitHub**: https://github.com/maxfok/nimbus-weather-card  
