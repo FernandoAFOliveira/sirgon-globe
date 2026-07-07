@@ -1,10 +1,10 @@
 # 🌦️ Nimbus Weather Card
 
-![Nimbus Weather Card](media/nimbus-weather-card-demo.gif)
+![Nimbus Weather Card Time Zone](media/nimbus-weather-card-demo.gif)
 
 A beautiful, Apple Weather‑inspired custom card for Home Assistant with multi-source weather tabs, smooth particle effects, dynamic backgrounds, and detailed moon phase support.
 
-🔗 **GitHub**: https://github.com/maxfok/nimbus-weather-card  
+🔗 **GitHub**: https://github.com/FernandoAFOliveira/nimbus-weather-card-time-zone 
 📦 **HACS**: Available in HACS
 
 ---
