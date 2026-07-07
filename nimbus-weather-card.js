@@ -530,6 +530,8 @@ class NimbusWeatherCard extends HTMLElement {
       aurora_override: config.aurora_override || false,
       tap_action: config.tap_action || null,
       cloud_mode: config.cloud_mode || 'auto',
+      use_local_timezone: config.use_local_timezone !== false,
+      timezone_offset: parseFloat(config.timezone_offset) || 0,
     };
     // Apply animation state after short delay to allow DOM to settle
     if ((this._config.animation_speed ?? 1) === 0) {
@@ -5025,14 +5027,44 @@ _clearDroplets() {
     };
   }
 
-  _tickClock() {
-    const displayOptions = this._activeDisplayOptions();
-    if (!displayOptions.show_clock) return;
-    const el = this.shadowRoot?.getElementById('det-clock');
-    if (!el) return;
-    const { date, time } = this._clockParts(displayOptions.use_24h);
-    el.querySelector('.det-clock-date').textContent = date;
-    el.querySelector('.det-clock-time').textContent = time;
+_tickClock() {
+    let now = new Date();
+
+    // 1. Automatic Timezone Hook from the active weather entity
+    const entity = this._config.active_source || (this._config.sources?.[0]?.entity) || '';
+    if (this._config.use_local_timezone !== false && entity) {
+      const entityState = this.hass.states[entity];
+      if (entityState && entityState.attributes && entityState.attributes.time_zone) {
+        try {
+          const localTimeString = now.toLocaleString("en-US", { timeZone: entityState.attributes.time_zone });
+          now = new Date(localTimeString);
+        } catch (e) {
+          console.warn("Nimbus Weather Card: Invalid timezone encountered:", entityState.attributes.time_zone);
+        }
+      }
+    }
+
+    // 2. Apply Finer Tweaking / Manual Offset (in hours)
+    if (this._config.timezone_offset) {
+      const offsetMs = parseFloat(this._config.timezone_offset) * 60 * 60 * 1000;
+      now = new Date(now.getTime() + offsetMs);
+    }
+
+    // Original card layout parsing & formatting
+    const use12h = !!this._config.time_format_12h;
+    const timeStr = now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: use12h
+    });
+
+    const parts = timeStr.split(' ');
+    this.shadowRoot.querySelectorAll('.nwc-time').forEach(el => {
+      el.textContent = parts[0];
+    });
+    this.shadowRoot.querySelectorAll('.nwc-am-pm').forEach(el => {
+      el.textContent = use12h && parts[1] ? parts[1] : '';
+    });
   }
 
   _initDetSplash(condition) {
@@ -5450,6 +5482,8 @@ class NimbusWeatherCardEditor extends HTMLElement {
       if (activeIndex >= 0) this._activeSourceEditorIndex = activeIndex;
     }
     this._config = {
+      use_local_timezone: true, // Default to true if not set
+      timezone_offset: 0,        // Default to 0 hours tweak
       ...config,
       sources,
     };
