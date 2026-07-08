@@ -1,10 +1,10 @@
-# 🌦️ Nimbus Weather Card
+# 🌦️ Nimbus Weather Card Time Zone
 
-![Nimbus Weather Card](media/nimbus-weather-card-demo.gif)
+![Nimbus Weather Card Time Zone](media/nimbus-weather-card-demo.gif)
 
 A beautiful, Apple Weather‑inspired custom card for Home Assistant with multi-source weather tabs, smooth particle effects, dynamic backgrounds, and detailed moon phase support.
 
-🔗 **GitHub**: https://github.com/maxfok/nimbus-weather-card  
+🔗 **GitHub**: https://github.com/FernandoAFOliveira/nimbus-weather-card-time-zone 
 📦 **HACS**: Available in HACS
 
 ---
@@ -59,7 +59,7 @@ The result is a more flexible card with better support for mixed weather sources
 
 ### 🌍 Multi-source weather
 
-Nimbus Weather Card can now display multiple weather sources as tabs above the card. You can combine multiple weather integrations, multiple locations from supported integrations, a local weather station as its own source, and supplementary sensors for details missing from a forecast integration.
+Nimbus Weather Card Time Zone can now display multiple weather sources as tabs above the card. You can combine multiple weather integrations, multiple locations from supported integrations, a local weather station as its own source, and supplementary sensors for details missing from a forecast integration.
 
 Each source can define its own name, weather entity, forecast type, display options, and optional sensors for humidity, wind, precipitation, pressure, UV index, feels-like temperature, and weather condition.
 
@@ -233,7 +233,7 @@ On clear nights, a random star detaches and streaks diagonally across the sky ev
 
 ### Via HACS
 1. Open HACS → Frontend
-2. Search for **Nimbus Weather Card**
+2. Search for **Nimbus Weather Card Time Zone**
 3. Click **Download**
 4. Refresh your browser after installation
 
