@@ -6264,7 +6264,6 @@ ${!sourceEditorEnabled ? `
       const showForecast = sr.getElementById('show_forecast')
         ? getChecked('show_forecast', true)
         : (this._config.show_forecast !== false);
-      const localTimeValue = getValue('local_time');
       const maxItemsValue = parseInt(getValue('max_items', this._config.max_items ?? 5), 10);
       // Start from existing config to preserve unknown fields like grid_options
       const cfg = {
