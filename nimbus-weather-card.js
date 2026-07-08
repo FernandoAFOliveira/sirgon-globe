@@ -5020,14 +5020,14 @@ _clearDroplets() {
 _clockParts(use24h = this._config?.use_24h !== false) {
     let now = new Date();
 
-    // 1. Correctly resolve the active weather entity using the card's native layout logic
-    const sources = this._normalizeSources?.() || [];
-    const preferredId = this._storedSourceId?.(sources) || this._activeSourceId || this._config?.active_source || sources[0]?.id;
-    const activeSource = sources.find(source => source.id === preferredId) || sources[0];
+    // 1. Safely resolve the active weather entity
+    const sources = this._normalizeSources ? this._normalizeSources() : [];
+    const preferredId = (this._storedSourceId && sources.length) ? this._storedSourceId(sources) : null;
+    const activeSource = sources.find(source => source.id === (preferredId || this._activeSourceId || this._config?.active_source)) || sources[0];
     const entity = activeSource ? activeSource.entity : (this._config?.entity || '');
 
-    // 2. Automatic Timezone Hook
-    if (this._config?.use_local_timezone !== false && entity) {
+    // 2. Safe Automatic Timezone Hook (Guarded against missing hass or states)
+    if (this._config?.use_local_timezone !== false && entity && this.hass && this.hass.states) {
       const entityState = this.hass.states[entity];
       if (entityState && entityState.attributes && entityState.attributes.time_zone) {
         try {
@@ -5045,7 +5045,7 @@ _clockParts(use24h = this._config?.use_24h !== false) {
       now = new Date(now.getTime() + offsetMs);
     }
 
-    // Native card formatting logic using our shifted 'now' object
+    // Native card formatting logic using our safely shifted 'now' object
     const locMap = {'en': 'en-US', 'es': 'es-ES', 'de': 'de-DE'};
     const loc = locMap[this._config?.language||'en'] || 'en-US';
     const h = now.getHours();
@@ -5057,13 +5057,18 @@ _clockParts(use24h = this._config?.use_24h !== false) {
   }
 
   _tickClock() {
-    const displayOptions = this._activeDisplayOptions();
+    const displayOptions = this._activeDisplayOptions ? this._activeDisplayOptions() : {};
     if (!displayOptions.show_clock) return;
     const el = this.shadowRoot?.getElementById('det-clock');
     if (!el) return;
+    
     const { date, time } = this._clockParts(displayOptions.use_24h);
-    el.querySelector('.det-clock-date').textContent = date;
-    el.querySelector('.det-clock-time').textContent = time;
+    const dateEl = el.querySelector('.det-clock-date');
+    const timeEl = el.querySelector('.det-clock-time');
+    
+    // Safely update elements only if they are fully rendered in the DOM
+    if (dateEl) dateEl.textContent = date;
+    if (timeEl) timeEl.textContent = time;
   }
 
   _initDetSplash(condition) {
