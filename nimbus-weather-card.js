@@ -5762,10 +5762,17 @@ class NimbusWeatherCardEditor extends HTMLElement {
   _render() {
     this._rendered = true;
     const c = this._config;
-    const weatherEntities = this._weatherEntities();
-    const sensorEntities = this._sensorEntities();
-    const sunEntities = this._sunEntities();
-    const timeEntities = (this.hass && this.hass.states) ? Object.keys(this.hass.states).filter(e => e.startsWith('sensor.') || e.startsWith('time.')).sort() : [];
+
+    // 1. Safe array lookups using a fallback check for the helper methods
+    const weatherEntities = typeof this._weatherEntities === 'function' ? this._weatherEntities() : [];
+    const sensorEntities = typeof this._sensorEntities === 'function' ? this._sensorEntities() : [];
+    const sunEntities = typeof this._sunEntities === 'function' ? this._sunEntities() : [];
+    
+    // 2. Safe root-level time tracking array filter
+    const timeEntities = (this.hass && this.hass.states) 
+      ? Object.keys(this.hass.states).filter(e => e.startsWith('sensor.') || e.startsWith('time.')).sort() 
+      : [];
+
     const sourceEditorEnabled = Array.isArray(c.sources) && c.sources.length > 0;
     const extraSensorsDisabled = !sourceEditorEnabled && this._val('show_forecast', true);
     const extraSensorsHint = sourceEditorEnabled
