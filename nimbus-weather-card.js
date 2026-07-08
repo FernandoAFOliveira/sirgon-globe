@@ -5763,6 +5763,7 @@ class NimbusWeatherCardEditor extends HTMLElement {
     const weatherEntities = this._weatherEntities();
     const sensorEntities = this._sensorEntities();
     const sunEntities = this._sunEntities();
+    const timeEntities = Object.keys(this.hass.states).filter(e => e.startsWith('sensor.') && this.hass.states[e].attributes?.device_class === 'timestamp' || e.startsWith('time.') || e.includes('worldclock')).sort();
     const sourceEditorEnabled = Array.isArray(c.sources) && c.sources.length > 0;
     const extraSensorsDisabled = !sourceEditorEnabled && this._val('show_forecast', true);
     const extraSensorsHint = sourceEditorEnabled
@@ -5880,16 +5881,23 @@ ${this._renderSourceEditor(weatherEntities, sensorEntities)}
 
 ${!sourceEditorEnabled ? `
 <!-- REQUIRED -->
-<div class="section">
-  <div class="section-title">Required</div>
-  <div class="row">
-    <div><div class="label">Weather Entity</div></div>
-    <select id="entity">
-      ${!c.entity ? `<option value="">— select entity —</option>` : ''}
-      ${weatherEntities.map(e => `<option value="${e}" ${c.entity===e?'selected':''}>${e}</option>`).join('')}
-    </select>
-  </div>
-</div>
+    <div class="section">
+      <div class="section-title">Required</div>
+      <div class="row">
+        <div><div class="label">Weather Entity</div></div>
+        <select id="entity">
+          ${!c.entity ? html`<option value="">— select entity —</option>` : ''}
+          ${weatherEntities.map(e => html`<option value="${e}" ${c.entity === e ? 'selected' : ''}>${e}</option>`).join('')}
+        </select>
+      </div>
+      <div class="row">
+        <div><div class="label">Local Time Entity (Worldclock)</div></div>
+        <select id="local_time">
+          ${!c.local_time ? html`<option value="">— select entity —</option>` : ''}
+          ${timeEntities.map(e => html`<option value="${e}" ${c.local_time === e ? 'selected' : ''}>${e}</option>`).join('')}
+        </select>
+      </div>
+    </div>
 
 <!-- DISPLAY -->
 <div class="section">
@@ -6252,6 +6260,7 @@ ${!sourceEditorEnabled ? `
 
     const upd = () => {
       const entity = (sr.getElementById('entity')?.value?.trim()) || this._config.entity || '';
+      const localTimeValue = (sr.getElementById('local_time')?.value?.trim()) || '';
       const showForecast = sr.getElementById('show_forecast')
         ? getChecked('show_forecast', true)
         : (this._config.show_forecast !== false);
@@ -6262,7 +6271,7 @@ ${!sourceEditorEnabled ? `
         ...this._config,
         type: 'custom:nimbus-weather-card-time-zone',
         entity,
-        local_time: localTimeValue || this._config.local_time || '',
+        local_time: localTimeValue || this._config.local_time || '', // Persists the selection!
         forecast_type: getValue('forecast_type', this._config.forecast_type || 'daily'),
         max_items: Number.isFinite(maxItemsValue) ? maxItemsValue : (this._config.max_items || 5),
         language: this.shadowRoot.getElementById('language')?.value || 'en',
