@@ -5020,7 +5020,7 @@ _clearDroplets() {
     }).join('');
   }
 
-  _clockParts(use24h = this._config?.use_24h !== false) {
+_clockParts(use24h = this._config?.use_24h !== false) {
     let now = new Date();
     let timeStringOverride = null;
     let fallbackToWeather = true;
@@ -5029,13 +5029,24 @@ _clearDroplets() {
     if (this._config?.local_time && this.hass && this.hass.states[this._config.local_time]) {
       const timeEntityState = this.hass.states[this._config.local_time];
       if (timeEntityState && timeEntityState.state && timeEntityState.state !== 'unknown' && timeEntityState.state !== 'unavailable') {
-        const parsedDate = new Date(timeEntityState.state);
-        if (!isNaN(parsedDate.getTime())) {
-          now = parsedDate;
-          fallbackToWeather = false; // Successfully used the user's entity
-        } else if (timeEntityState.state.includes(':')) {
-          timeStringOverride = timeEntityState.state;
+        const stateStr = String(timeEntityState.state);
+        
+        // Handle raw digital clock string faces (e.g., "00:41") directly
+        if (/^\d{1,2}:\d{2}$/.test(stateStr)) {
+          timeStringOverride = stateStr;
           fallbackToWeather = false;
+          
+          // Sync internal date hours/minutes for the date string builder below
+          const [hours, minutes] = stateStr.split(':').map(Number);
+          now.setHours(hours);
+          now.setMinutes(minutes);
+        } else {
+          // Handle standard ISO timestamp formats if someone feeds it an official time entity
+          const parsedDate = new Date(stateStr);
+          if (!isNaN(parsedDate.getTime())) {
+            now = parsedDate;
+            fallbackToWeather = false;
+          }
         }
       }
     }
@@ -5068,15 +5079,20 @@ _clearDroplets() {
 
     // Native card formatting and rendering logic
     const locMap = {'en': 'en-US', 'es': 'es-ES', 'de': 'de-DE'};
-    const loc = locMap[this._config?.language||'en'] || 'en-US';
+    const loc = locMap[this._config?.language || 'en'] || 'en-US';
     
+    // Format if custom engine generated a timeStringOverride string face
     if (timeStringOverride && timeStringOverride.includes(':')) {
+      const [hours, minutes] = timeStringOverride.split(':').map(Number);
       return {
         date: now.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' }),
-        time: timeStringOverride
+        time: use24h 
+          ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}` 
+          : `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`
       };
     }
 
+    // Fallback native formatting
     const h = now.getHours();
     const m = String(now.getMinutes()).padStart(2, '0');
     return {
