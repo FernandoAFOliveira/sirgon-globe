@@ -251,6 +251,19 @@ Existing cards remain in their original layout by default. In a Sections dashboa
 
 ---
 
+## Dual temperature units
+
+Enable **Show Both Temperature Units** in Display (or Global Display) or set:
+
+```yaml
+temperature_unit: F
+show_both_units: true
+```
+
+The primary temperature uses `temperature_unit` (`C` or `F`); the secondary uses the other scale. For example, 68°F is shown alongside 20°C. Both units appear in current temperature, high/low, feels-like and forecasts, including the compact forecast dialog. The option is off by default, and can be used with either card layout. Temperatures are converted from the active weather source or the local temperature sensor's own unit, then rounded independently.
+
+---
+
 # 🚀 Advanced Example
 
 ```yaml

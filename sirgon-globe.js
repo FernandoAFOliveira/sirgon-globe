@@ -517,7 +517,8 @@ class SirgonGlobe extends HTMLElement {
       name: config.name || null,
       moon_entity: config.moon_entity || null,
       sun_entity: config.sun_entity || null,
-      temperature_unit: config.temperature_unit || 'C',
+      temperature_unit: config.temperature_unit === 'F' ? 'F' : 'C',
+      show_both_units: _boolConfigValue(config.show_both_units, false),
       use_24h: config.use_24h !== false,
             animation_speed: config.animation_speed ?? 1,
       feels_like_entity: config.feels_like_entity ?? '',
@@ -4205,6 +4206,24 @@ _clearDroplets() {
   box-shadow:0 20px 60px rgba(0,0,0,.45);
 }
 .compact-forecast-dialog::backdrop { background:rgba(0,0,0,.60); }
+.temp-primary { white-space:nowrap; }
+.temp-secondary { white-space:nowrap; display:block; font-size:.78em; opacity:.84; font-weight:500; line-height:1.2; }
+.tmp .temp-unit { font-size:.42em; letter-spacing:0; }
+.tmp .temp-secondary { display:inline-block; font-size:.42em; margin-left:10px; letter-spacing:0; vertical-align:baseline; }
+.dual-temperature .hl { display:flex; flex-wrap:wrap; gap:2px 9px; }
+.card.compact.dual-temperature .tmp { font-size:42px; }
+.card.compact.dual-temperature .tmp .temp-secondary { display:block; margin:1px 0 0; font-size:.43em; }
+.card.compact.dual-temperature .hl { flex-direction:column; gap:1px; font-size:11px; line-height:1.15; }
+.card.compact.dual-temperature .hl span { white-space:normal; }
+.card.compact.dual-temperature .ct { column-gap:6px; }
+.dual-temperature .fc-modal-lo, .dual-temperature .fc-modal-hi { width:auto; min-width:42px; flex-shrink:0; }
+.dual-temperature .fc-modal-temp { width:auto; min-width:48px; flex-shrink:0; }
+.dual-temperature .fc-modal-lo .temp-secondary, .dual-temperature .fc-modal-hi .temp-secondary,
+.dual-temperature .fc-modal-temp .temp-secondary { font-size:10px; }
+.dual-temperature .fc-modal-day { flex-shrink:0; }
+.dual-temperature .fc-modal-precip { flex-shrink:0; }
+.dual-temperature .fc-modal-bar-bg { min-width:8px; }
+.dual-temperature .fc-modal-row { gap:5px; padding-left:10px; padding-right:10px; }
 .compact-forecast-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 16px 10px; }
 .compact-forecast-location { font-weight:700; font-size:16px; overflow-wrap:anywhere; }
 .compact-forecast-controls { display:flex; gap:6px; padding:0 16px 8px; }
@@ -4290,19 +4309,44 @@ _clearDroplets() {
   }
 
   // Μόνο για θερμοκρασίες — κάνει μετατροπή C↔F αν χρειάζεται
-  _t(v) {
-    v = this._num(v);
+  _weatherTemperatureUnit() {
+    const attrs = this._activeSourceContext().weatherState?.attributes;
+    return attrs?.temperature_unit || this._hass?.config?.unit_system?.temperature || '°C';
+  }
+
+  _t(value, inputUnit = this._weatherTemperatureUnit(), outputUnit = this._config?.temperature_unit) {
+    const v = this._num(value);
     if (v === null) return '--';
+    const unit = String(inputUnit || this._weatherTemperatureUnit()).trim().toLowerCase().replace(/°/g, '');
+    const source = unit === 'f' || unit === 'fahrenheit' ? 'F'
+      : unit === 'k' || unit === 'kelvin' ? 'K' : 'C';
+    const target = outputUnit === 'F' ? 'F' : 'C';
+    if (source === target) return Math.round(v) || 0;
+    const celsius = source === 'F' ? (v - 32) * 5 / 9 : source === 'K' ? v - 273.15 : v;
+    return Math.round(target === 'F' ? celsius * 9 / 5 + 32 : celsius) || 0;
+  }
 
-    const entityAttrs = this._hass?.states[this._config?.entity]?.attributes;
-    const rawUnit = entityAttrs?.temperature_unit || '°C';
-    const entityIsF = rawUnit === '°F' || rawUnit === 'F' || rawUnit === 'fahrenheit';
-    const displayF = this._config?.temperature_unit === 'F';
+  _temperatureParts(value, inputUnit) {
+    const primaryUnit = this._config?.temperature_unit === 'F' ? 'F' : 'C';
+    const secondaryUnit = primaryUnit === 'F' ? 'C' : 'F';
+    const primary = this._t(value, inputUnit, primaryUnit);
+    if (primary === '--') return { primary: '--', secondary: '' };
+    if (!this._config?.show_both_units) return { primary: `${primary}°`, secondary: '' };
+    const secondary = this._t(value, inputUnit, secondaryUnit);
+    return { primary: `${primary}°${primaryUnit}`, secondary: `${secondary}°${secondaryUnit}` };
+  }
 
-    if (!entityIsF && displayF) v = v * 9/5 + 32;
-    else if (entityIsF && !displayF) v = (v - 32) * 5/9;
+  _temperatureText(value, inputUnit) {
+    const { primary, secondary } = this._temperatureParts(value, inputUnit);
+    return secondary ? `${primary} / ${secondary}` : primary;
+  }
 
-    return Math.round(v);
+  _temperatureMarkup(value, inputUnit) {
+    const { primary, secondary } = this._temperatureParts(value, inputUnit);
+    if (!secondary) return primary;
+    const main = primary.slice(0, -1);
+    const unit = primary.slice(-1);
+    return `<span class="temp-primary">${main}<span class="temp-unit">${unit}</span></span><span class="temp-secondary">${secondary}</span>`;
   }
 
   _isUsableValue(value) {
@@ -4631,7 +4675,7 @@ _clearDroplets() {
         <div class="loc">${this._escapeHtml(name)}</div>
         ${clock ? `<div class="compact-clock" id="det-clock"><span class="det-clock-time">${this._escapeHtml(clock.time)}</span></div>` : ''}
       </div>
-      <div class="tmp">${temperature}°</div>
+      <div class="tmp">${temperature}</div>
       <div class="hl">${highText ? `<span class="high">${highText}</span>` : ''} ${lowText ? `<span class="low">${lowText}</span>` : ''}</div>
       <div class="cn2">${this._escapeHtml(condition)}</div>
       ${showForecast ? `
@@ -4708,6 +4752,8 @@ _clearDroplets() {
     const compact = this._config.compact_mode;
     const cardEl = this.shadowRoot.getElementById('card');
     cardEl?.classList.toggle('compact', compact);
+    cardEl?.classList.toggle('dual-temperature', !!this._config.show_both_units);
+    this.shadowRoot.getElementById('compact-forecast-dialog')?.classList.toggle('dual-temperature', !!this._config.show_both_units);
     if (!compact || !displayOptions.show_forecast) {
       this._closeCompactForecast();
       this._compactForecastData = null;
@@ -4762,8 +4808,8 @@ _clearDroplets() {
     const maxItems = displayOptions.max_items;
     const items   = forecast.slice(0, maxItems);
     const todayRange = this._todayTempRange(dailyItems, forecast, stateObj, sourceCtx.weatherEntity);
-    const highText = todayRange.high !== null ? `↑${this._t(todayRange.high)}°` : '';
-    const lowText  = todayRange.low  !== null ? `↓${this._t(todayRange.low)}°` : '';
+    const highText = todayRange.high !== null ? `↑${this._temperatureText(todayRange.high)}` : '';
+    const lowText  = todayRange.low  !== null ? `↓${this._temperatureText(todayRange.low)}` : '';
     const highLowHtml = [highText, lowText].filter(Boolean).join('  ');
     const localField = (legacyKey) => sourceOverrides
       ? this._localSourceField(sourceOverrides, legacyKey)
@@ -4807,7 +4853,8 @@ _clearDroplets() {
     const ct = this.shadowRoot.getElementById('ct');
     if (ct && compact) {
       const name = sourceMode ? this._sourceDisplayName(activeSource, stateObj) : (this._config.name || attrs.friendly_name || '');
-      const localTemp = this._num(localSensor('local_temperature')?.state);
+      const tempSensor = localSensor('local_temperature');
+      const localTemp = this._num(tempSensor?.state);
       const showForecast = !!stateObj && displayOptions.show_forecast;
       this._compactForecastData = showForecast ? {
         name, mainType, forecast,
@@ -4816,7 +4863,8 @@ _clearDroplets() {
       } : null;
       if (!showForecast) this._closeCompactForecast();
       ct.innerHTML = this._renderCompactSummary({
-        name, temperature: this._t(localTemp !== null ? localTemp : attrs.temperature),
+        name, temperature: this._temperatureMarkup(localTemp !== null ? localTemp : attrs.temperature,
+          localTemp !== null ? tempSensor?.attributes?.unit_of_measurement : undefined),
         highText: stateObj ? highText : '', lowText: stateObj ? lowText : '',
         condition: this._condLabel(cond), clock: _clock, showForecast,
       });
@@ -4833,8 +4881,8 @@ _clearDroplets() {
         <div class="tmp">${(() => {
           const s = localSensor('local_temperature');
           const localTemp = this._num(s?.state);
-          return localTemp !== null ? this._t(localTemp) : this._t(attrs.temperature);
-        })()}°</div>
+          return localTemp !== null ? this._temperatureMarkup(localTemp, s?.attributes?.unit_of_measurement) : this._temperatureMarkup(attrs.temperature);
+        })()}</div>
         <div class="hl">${stateObj && highLowHtml ? `${highText ? `<span class="high">${highText}</span>` : ''}${highText && lowText ? '  ' : ''}${lowText ? `<span class="low">${lowText}</span>` : ''}` : ''}</div>
         <div class="cn2">${this._condLabel(cond)}</div>
         ${(displayOptions.show_details || displayOptions.show_clock) ? `
@@ -4887,14 +4935,10 @@ _clearDroplets() {
               // Row 2 slots
               const pressure     = localVal('local_pressure', attrs.pressure);
               const uv           = localVal('local_uv', attrs.uv_index ?? null);
-              const feelsLike    = (() => {
-                const s = localSensor('local_feels_like');
-                const localFeels = this._num(s?.state);
-                if (localFeels !== null) return localFeels;
-                return c.feels_like_entity
-                  ? this._num(h?.states[c.feels_like_entity]?.state)
-                  : this._num(attrs.apparent_temperature ?? attrs.feels_like ?? null);
-              })();
+              const feelsSensor = localSensor('local_feels_like') || h?.states?.[c.feels_like_entity];
+              const feelsSensorValue = this._num(feelsSensor?.state);
+              const feelsLike = feelsSensorValue ?? this._num(attrs.apparent_temperature ?? attrs.feels_like ?? null);
+              const feelsUnit = feelsSensorValue !== null ? feelsSensor?.attributes?.unit_of_measurement : undefined;
 
               // Build rows
               const row1Items = [
@@ -4906,7 +4950,7 @@ _clearDroplets() {
               const row2Items = [
                 pressure     != null ? `<div class="di"><div class="dic">${MDI.pressure}</div>${this._fmt(pressure)} hPa</div>` : '',
                 uv           != null ? `<div class="di"><div class="dic">${MDI.uv}</div>UV ${this._fmt(uv)}</div>` : '',
-                feelsLike    != null ? `<div class="di"><div class="dic">${MDI.thermometer}</div>Feels like ${this._t(feelsLike)}°</div>` : '',
+                feelsLike    != null ? `<div class="di"><div class="dic">${MDI.thermometer}</div>Feels like ${this._temperatureText(feelsLike, feelsUnit)}</div>` : '',
               ].filter(Boolean);
 
               // Layout: if total <=4 merge into 1 row
@@ -4962,13 +5006,13 @@ _clearDroplets() {
             <div class="fi fi-sun" data-suntime="${sunTime}" aria-label="${f.condition === 'sunrise' ? 'Sunrise' : 'Sunset'} ${sunTime}" tabindex="0">
               <div class="fd">${this._day(f.datetime, mainType, displayOptions.use_24h)}</div>
               <div class="fic">${this.getCachedIcon(f.condition, false, moonPhase, moonFraction)}</div>
-              <div class="fh">${f._slotTemp != null ? this._t(f._slotTemp) + '°' : ''}</div>
+              <div class="fh">${f._slotTemp != null ? this._temperatureMarkup(f._slotTemp) : ''}</div>
             </div>` : `
             <div class="fi">
               <div class="fd">${this._day(f.datetime, mainType, displayOptions.use_24h)}</div>
               <div class="fic">${this.getCachedIcon(icon.condition, icon.isNight, moonPhase, moonFraction)}</div>
-              <div class="fh">${this._t(f.temperature)}°</div>
-              ${f.templow !== undefined ? `<div class="fl">${this._t(f.templow)}°</div>` : ''}
+              <div class="fh">${this._temperatureMarkup(f.temperature)}</div>
+              ${f.templow !== undefined ? `<div class="fl">${this._temperatureMarkup(f.templow)}</div>` : ''}
             </div>`;
             }).join('');
           })()}
@@ -5170,7 +5214,7 @@ _clearDroplets() {
         return `<div class="fc-modal-row">
           <div class="fc-modal-day">${this._day(f.datetime, forecastType, use24h)}</div>
           <div class="fc-modal-icon">${this.getCachedIcon(icon.condition, icon.isNight, moonPhase, moonFraction)}</div>
-          <div class="fc-modal-temp">${this._t(f.temperature)}°</div>
+          <div class="fc-modal-temp">${this._temperatureMarkup(f.temperature)}</div>
           <div class="fc-modal-bar-bg"><div class="fc-modal-bar-fill" style="width:${barWidth.toFixed(1)}%;margin-left:${barLeft.toFixed(1)}%"></div></div>
           <div class="fc-modal-precip">${f.precipitation_probability > 0 ? f.precipitation_probability+'%' : ''}</div>
         </div>`;
@@ -5178,9 +5222,9 @@ _clearDroplets() {
       return `<div class="fc-modal-row">
         <div class="fc-modal-day">${this._day(f.datetime, forecastType, use24h)}</div>
         <div class="fc-modal-icon">${this.getCachedIcon(icon.condition, icon.isNight, moonPhase, moonFraction)}</div>
-        <div class="fc-modal-lo">${this._t(safeLo)}°</div>
+        <div class="fc-modal-lo">${this._temperatureMarkup(safeLo)}</div>
         <div class="fc-modal-bar-bg"><div class="fc-modal-bar-fill" style="width:${barWidth.toFixed(1)}%;margin-left:${barLeft.toFixed(1)}%"></div></div>
-        <div class="fc-modal-hi">${this._t(safeHi)}°</div>
+        <div class="fc-modal-hi">${this._temperatureMarkup(safeHi)}</div>
         <div class="fc-modal-precip">${f.precipitation_probability > 0 ? f.precipitation_probability+'%' : ''}</div>
       </div>`;
     }).join('');
@@ -6153,6 +6197,10 @@ ${!sourceEditorEnabled ? `
     </select>
   </div>
   <div class="row">
+    <div><div class="label">Show Both Temperature Units</div><div class="sublabel">Show °C and °F; Display Unit remains primary</div></div>
+    ${this._toggle('show_both_units', _boolConfigValue(this._val('show_both_units', false), false))}
+  </div>
+  <div class="row">
     <div><div class="label">24h Time Format</div><div class="sublabel">Used in hourly forecast</div></div>
     ${this._toggle('use_24h', this._val('use_24h', true))}
   </div>
@@ -6217,6 +6265,10 @@ ${!sourceEditorEnabled ? `
       <option value="C" ${this._val('temperature_unit','C')==='C'?'selected':''}>°C</option>
       <option value="F" ${this._val('temperature_unit','C')==='F'?'selected':''}>°F</option>
     </select>
+  </div>
+  <div class="row">
+    <div><div class="label">Show Both Temperature Units</div><div class="sublabel">Show °C and °F; Display Unit remains primary</div></div>
+    ${this._toggle('show_both_units', _boolConfigValue(this._val('show_both_units', false), false))}
   </div>
   <div class="row">
     <div><div class="label">Language</div><div class="sublabel">Card display language</div></div>
@@ -6523,6 +6575,7 @@ ${!sourceEditorEnabled ? `
           ? getChecked('show_details', true)
           : (this._config.show_details !== false),
         temperature_unit: sr.getElementById('temperature_unit')?.value || 'C',
+        show_both_units: getChecked('show_both_units', _boolConfigValue(this._config.show_both_units, false)),
         use_24h: sr.getElementById('use_24h')
           ? getChecked('use_24h', true)
           : (this._config.use_24h !== false),
