@@ -70,6 +70,7 @@ without depending on the browser's timezone.
 - Realistic moon rendering
 - Hourly and daily forecasts
 - Forecast strip
+- Optional compact weather cards with daily/hourly forecast pop-up
 - Lens flare effects
 - Aurora Borealis and Aurora Australis
 - Shooting stars during clear nights
@@ -229,6 +230,37 @@ show_details: true
 
 forecast_type: daily
 ```
+
+---
+
+## Compact Mode
+
+For dashboards where space is limited, enable **Compact Mode** in the card's Display (or Global Display) settings, or add:
+
+```yaml
+type: custom:sirgon-globe
+entity: weather.forecast_home
+local_time: sensor.home_time
+show_clock: true
+compact_mode: true
+```
+
+The card displays the location, current temperature, daily high/low, weather condition and optional local time, while preserving the animated sky. The details panel and forecast strip are hidden. A small forecast button opens a separate dialog with daily and hourly forecasts; closing it returns to the same compact card without moving surrounding dashboard cards. `forecast_type` controls which forecast opens first, and `show_forecast: false` hides the button. Forecast availability depends on the weather provider. Compact mode applies to the whole card, including cards with multiple sources.
+
+Existing cards remain in their original layout by default. In a Sections dashboard, an existing card with an explicit `grid_options.rows` value may need to be resized in the Layout tab or have its explicit row override removed to reclaim the space. Compact cards request two rows (three when multiple source tabs are present); actual height depends on the dashboard layout.
+
+---
+
+## Dual temperature units
+
+Enable **Show Both Temperature Units** in Display (or Global Display) or set:
+
+```yaml
+temperature_unit: F
+show_both_units: true
+```
+
+The primary temperature uses `temperature_unit` (`C` or `F`); the secondary uses the other scale. For example, 68°F is shown alongside 20°C. Both units appear in current temperature, high/low, feels-like and forecasts, including the compact forecast dialog. The option is off by default, and can be used with either card layout. Temperatures are converted from the active weather source or the local temperature sensor's own unit, then rounded independently.
 
 ---
 
