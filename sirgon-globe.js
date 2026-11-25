@@ -411,6 +411,7 @@ class SirgonGlobe extends HTMLElement {
   }
   static getConfigElement() { return document.createElement('sirgon-globe-editor'); }
   _layoutRows() {
+    if (this._config?.compact_mode) return this._normalizeSources().length > 1 ? 3 : 2;
     if (this._sourceSystemEnabled?.()) {
       const sources = this._normalizeSources?.() || [];
       const preferredId = this._storedSourceId?.(sources) || this._activeSourceId || this._config?.active_source || sources[0]?.id;
@@ -467,6 +468,8 @@ class SirgonGlobe extends HTMLElement {
     this._lastModalTrigger = null;
     this._activeSourceId = null;
     this._tempRangeCache = new Map();
+    this._compactForecastData = null;
+    this._compactForecastType = null;
   }
 
   _debounce(func, wait) {
@@ -510,6 +513,7 @@ class SirgonGlobe extends HTMLElement {
       max_items: config.max_items || 5,
       show_forecast: config.show_forecast !== false,
       show_details: config.show_details !== false,
+      compact_mode: _boolConfigValue(config.compact_mode, false),
       name: config.name || null,
       moon_entity: config.moon_entity || null,
       sun_entity: config.sun_entity || null,
@@ -848,6 +852,7 @@ class SirgonGlobe extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._closeCompactForecast();
     if (this._lxInterval)   { clearInterval(this._lxInterval);   this._lxInterval   = null; }
     if (this._splashIntervals) { this._splashIntervals.forEach(id => clearInterval(id)); this._splashIntervals = []; }
     if (this._timeInterval) { clearInterval(this._timeInterval);  this._timeInterval = null; }
@@ -3575,6 +3580,9 @@ _clearDroplets() {
   }
 
   _buildShell() {
+    this._closeCompactForecast();
+    this._compactForecastData = null;
+    this._compactForecastType = null;
     if (this._rafId) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
@@ -4165,6 +4173,50 @@ _clearDroplets() {
 
 
 
+.card.compact { min-height:0; }
+.card.compact .ct {
+  display:grid; grid-template-columns:max-content minmax(0,1fr) auto;
+  grid-template-areas:"heading heading heading" "temperature range forecast" "temperature condition forecast";
+  align-items:center; column-gap:8px; row-gap:2px; padding:10px 12px;
+}
+.card.compact .hd { grid-area:heading; justify-content:flex-start; gap:8px; min-width:0; padding-right:40px; margin:0; }
+.card.compact .loc { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.card.compact .compact-clock { font-size:11px; font-weight:600; opacity:.9; white-space:nowrap; flex-shrink:0; }
+.card.compact .tmp { grid-area:temperature; font-size:48px; margin:0; }
+.card.compact .hl { grid-area:range; font-size:12px; margin:0; }
+.card.compact .hl span { white-space:nowrap; }
+.card.compact .cn2 { grid-area:condition; font-size:14px; line-height:1.2; margin:0; overflow-wrap:anywhere; }
+.card.compact .entity-error { grid-column:1/-1; min-height:0; }
+.compact-forecast-btn {
+  grid-area:forecast; display:flex; align-items:center; justify-content:center;
+  min-width:34px; min-height:34px; padding:5px; border:1px solid rgba(255,255,255,.35);
+  background:rgba(4,16,36,.5); color:#fff; border-radius:12px; cursor:pointer;
+}
+.compact-forecast-btn:hover { background:rgba(4,16,36,.8); }
+.compact-forecast-btn:focus-visible, .compact-forecast-dialog button:focus-visible {
+  outline:2px solid #a4dcff; outline-offset:2px;
+}
+.compact-forecast-dialog {
+  position:fixed; inset:0; margin:auto; box-sizing:border-box;
+  width:min(420px,calc(100% - 32px)); max-height:min(560px,calc(100% - 32px));
+  overflow:auto; overscroll-behavior:contain; padding:14px 0 12px;
+  background:linear-gradient(180deg,#142341,#080f20);
+  border:1px solid rgba(255,255,255,.24); border-radius:20px; color:#fff;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);
+}
+.compact-forecast-dialog::backdrop { background:rgba(0,0,0,.60); }
+.compact-forecast-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 16px 10px; }
+.compact-forecast-location { font-weight:700; font-size:16px; overflow-wrap:anywhere; }
+.compact-forecast-controls { display:flex; gap:6px; padding:0 16px 8px; }
+.compact-forecast-dialog button {
+  font:inherit; color:#fff; background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:6px 10px; cursor:pointer;
+}
+.compact-forecast-dialog button[aria-pressed="true"] { background:rgba(115,177,241,.30); border-color:#a4dcff; }
+.compact-forecast-dialog .fc-modal-title { color:rgba(255,255,255,.82); }
+.compact-forecast-dialog .fc-modal-day, .compact-forecast-dialog .fc-modal-lo,
+.compact-forecast-dialog .fc-modal-empty { color:rgba(255,255,255,.75); }
+
 /* ── LENS FLARES — handled by <sirgon-lens-flare-overlay> ── */
 
 </style>
@@ -4194,7 +4246,20 @@ _clearDroplets() {
     <canvas id="dp-canvas"></canvas>
     <div class="ct" id="ct"></div>
   </div>
+  <dialog class="compact-forecast-dialog" id="compact-forecast-dialog" aria-labelledby="compact-forecast-location">
+    <div class="compact-forecast-heading">
+      <div class="compact-forecast-location" id="compact-forecast-location"></div>
+      <button type="button" id="compact-forecast-close" aria-label="Close forecast">✕</button>
+    </div>
+    <div class="compact-forecast-controls" role="group" aria-label="Forecast type">
+      <button type="button" data-compact-forecast-type="daily" aria-pressed="false">Daily</button>
+      <button type="button" data-compact-forecast-type="hourly" aria-pressed="false">Hourly</button>
+    </div>
+    <div class="fc-modal-title"></div>
+    <div class="compact-forecast-rows"></div>
+  </dialog>
 </div>`;
+    this._attachCompactForecastHandlers();
     this._modalHandlersAttached = false;
     this.shadowRoot.getElementById('card').addEventListener('click', e => {
       const path = e.composedPath?.() || [];
@@ -4559,6 +4624,79 @@ _clearDroplets() {
     `;
   }
 
+  _renderCompactSummary({ name, temperature, highText, lowText, condition, clock, showForecast }) {
+    const open = this.shadowRoot?.getElementById('compact-forecast-dialog')?.open;
+    return `
+      <div class="hd">
+        <div class="loc">${this._escapeHtml(name)}</div>
+        ${clock ? `<div class="compact-clock" id="det-clock"><span class="det-clock-time">${this._escapeHtml(clock.time)}</span></div>` : ''}
+      </div>
+      <div class="tmp">${temperature}°</div>
+      <div class="hl">${highText ? `<span class="high">${highText}</span>` : ''} ${lowText ? `<span class="low">${lowText}</span>` : ''}</div>
+      <div class="cn2">${this._escapeHtml(condition)}</div>
+      ${showForecast ? `
+        <button type="button" class="compact-forecast-btn" id="compact-forecast-btn"
+          title="Show forecast" aria-label="Show forecast" aria-haspopup="dialog"
+          aria-controls="compact-forecast-dialog" aria-expanded="${!!open}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 9l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>` : ''}
+    `;
+  }
+
+  _attachCompactForecastHandlers() {
+    const dialog = this.shadowRoot.getElementById('compact-forecast-dialog');
+    if (!dialog) return;
+    dialog.querySelector('#compact-forecast-close').addEventListener('click', () => dialog.close());
+    dialog.querySelectorAll('[data-compact-forecast-type]').forEach(button => {
+      button.addEventListener('click', () => {
+        this._compactForecastType = button.dataset.compactForecastType;
+        this._refreshCompactForecast();
+      });
+    });
+    dialog.addEventListener('click', event => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      if (dialog.open || !this.isConnected) return;
+      const trigger = this.shadowRoot?.getElementById('compact-forecast-btn');
+      trigger?.setAttribute('aria-expanded', 'false');
+      trigger?.focus({ preventScroll: true });
+    });
+  }
+
+  _openCompactForecast() {
+    const dialog = this.shadowRoot?.getElementById('compact-forecast-dialog');
+    if (!dialog || dialog.open || !this._compactForecastData) return;
+    this._compactForecastType = this._compactForecastData.mainType;
+    this._refreshCompactForecast();
+    dialog.showModal();
+    this.shadowRoot.getElementById('compact-forecast-btn')?.setAttribute('aria-expanded', 'true');
+  }
+
+  _closeCompactForecast() {
+    const dialog = this.shadowRoot?.getElementById('compact-forecast-dialog');
+    if (dialog?.open) dialog.close();
+  }
+
+  _refreshCompactForecast() {
+    const data = this._compactForecastData;
+    const dialog = this.shadowRoot?.getElementById('compact-forecast-dialog');
+    if (!data || !dialog) return;
+    const type = this._compactForecastType || data.mainType;
+    const forecast = type === data.mainType ? data.forecast : data.alternateForecast;
+    dialog.querySelector('#compact-forecast-location').textContent = data.name;
+    dialog.querySelectorAll('[data-compact-forecast-type]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.compactForecastType === type));
+    });
+    this._updateForecastModal(forecast, data.moonPhase, data.moonFraction, type, data.use24h,
+      dialog.querySelector('.compact-forecast-rows'), dialog.querySelector('.fc-modal-title'));
+  }
+
   _renderContent() {
     if (!this._hass || !this._config) return;
     const sourceCtx = this._activeSourceContext();
@@ -4567,6 +4705,13 @@ _clearDroplets() {
     const sourceOverrides = sourceMode ? activeSource : null;
     const localSource = sourceMode && activeSource?.type === 'local' ? activeSource : null;
     const displayOptions = this._activeDisplayOptions(sourceCtx);
+    const compact = this._config.compact_mode;
+    const cardEl = this.shadowRoot.getElementById('card');
+    cardEl?.classList.toggle('compact', compact);
+    if (!compact || !displayOptions.show_forecast) {
+      this._closeCompactForecast();
+      this._compactForecastData = null;
+    }
     const tabsSlot = this.shadowRoot.getElementById('source-tabs-slot');
     if (tabsSlot) {
       const tabsHtml = this._renderSourceTabs(sourceCtx);
@@ -4578,6 +4723,8 @@ _clearDroplets() {
       : (this._config.entity ? this._hass.states[this._config.entity] : null);
     const hasLocalData = !!(localSource && this._localSourceField(localSource, 'local_temperature'));
     if (!stateObj && !this._config.local_weather_station && !hasLocalData) {
+      this._closeCompactForecast();
+      this._compactForecastData = null;
       this._renderEntityError(sourceCtx.weatherEntity || this._config.entity);
       return;
     }
@@ -4600,7 +4747,6 @@ _clearDroplets() {
     const attrs   = stateObj?.attributes || {};
     const isNight = this._isNight(cond);
     const bgCls   = this._bgClass(cond, isNight);
-    const cardEl = this.shadowRoot.getElementById('card');
     if (cardEl) cardEl.classList.toggle('is-night', !!isNight);
     const moonPhase    = this._moonPhase();
     const moonFraction = this._moonPhaseFraction();
@@ -4659,7 +4805,27 @@ _clearDroplets() {
     }
 
     const ct = this.shadowRoot.getElementById('ct');
-    if (ct) {
+    if (ct && compact) {
+      const name = sourceMode ? this._sourceDisplayName(activeSource, stateObj) : (this._config.name || attrs.friendly_name || '');
+      const localTemp = this._num(localSensor('local_temperature')?.state);
+      const showForecast = !!stateObj && displayOptions.show_forecast;
+      this._compactForecastData = showForecast ? {
+        name, mainType, forecast,
+        alternateForecast: modalForecast.length ? modalForecast : (mainType === 'hourly' ? this._dailyForecast : []),
+        moonPhase, moonFraction, use24h: displayOptions.use_24h,
+      } : null;
+      if (!showForecast) this._closeCompactForecast();
+      ct.innerHTML = this._renderCompactSummary({
+        name, temperature: this._t(localTemp !== null ? localTemp : attrs.temperature),
+        highText: stateObj ? highText : '', lowText: stateObj ? lowText : '',
+        condition: this._condLabel(cond), clock: _clock, showForecast,
+      });
+      this.shadowRoot.getElementById('compact-forecast-btn')?.addEventListener('click', event => {
+        event.stopPropagation();
+        this._openCompactForecast();
+      });
+      if (this.shadowRoot.getElementById('compact-forecast-dialog')?.open) this._refreshCompactForecast();
+    } else if (ct) {
       ct.innerHTML = `
         <div class="hd">
           <div class="loc">${this._escapeHtml(sourceMode ? this._sourceDisplayName(activeSource, stateObj) : (this._config.name || attrs.friendly_name || ''))}</div>
@@ -4832,7 +4998,7 @@ _clearDroplets() {
     // removed start log
     this._startCanvas(cond, isNight, attrs);
     // v2: update modal rows on every render (modal DOM persists in _buildShell)
-    this._updateForecastModal(modalForecast, moonPhase, moonFraction, modalForecastType, displayOptions.use_24h);
+    if (!compact) this._updateForecastModal(modalForecast, moonPhase, moonFraction, modalForecastType, displayOptions.use_24h);
     this._sunTooltipHandlers();
     // Attach modal handlers only once
     if (!this._modalHandlersAttached) {
@@ -4970,9 +5136,8 @@ _clearDroplets() {
     });
   }
 
-  _updateForecastModal(forecast, moonPhase, moonFraction, forecastType = this._modalForecastType(), use24h = this._config?.use_24h !== false) {
-    const rows = this.shadowRoot?.getElementById('fc-modal-rows');
-    const title = this.shadowRoot?.querySelector('.fc-modal-title');
+  _updateForecastModal(forecast, moonPhase, moonFraction, forecastType = this._modalForecastType(), use24h = this._config?.use_24h !== false,
+    rows = this.shadowRoot?.getElementById('fc-modal-rows'), title = this.shadowRoot?.querySelector('.fc-modal-title')) {
     if (title) title.textContent = this._forecastTitle(forecastType);
     if (!rows) return;
     if (!forecast.length) {
@@ -5700,7 +5865,7 @@ _fire(config) {
         </select>
       </div>
       <div class="row source-row">
-        <div><div class="label">Forecast Strip</div><div class="sublabel">Show forecast row on this tab</div></div>
+        <div><div class="label">Forecast</div><div class="sublabel">Forecast strip, or forecast button in compact mode</div></div>
         ${sourceToggle(index, 'show_forecast', _boolConfigValue(display.show_forecast, true))}
       </div>
       <div class="row source-row">
@@ -5973,6 +6138,10 @@ ${!sourceEditorEnabled ? `
 <div class="section">
   <div class="section-title">Display</div>
   <div class="row">
+    <div><div class="label">Compact Mode</div><div class="sublabel">Show current weather only; open the forecast with a button</div></div>
+    ${this._toggle('compact_mode', _boolConfigValue(this._val('compact_mode', false), false))}
+  </div>
+  <div class="row">
     <div><div class="label">Name</div><div class="sublabel">Leave empty for entity friendly name</div></div>
     <input type="text" id="name" value="${c.name||''}" placeholder="e.g. Athens">
   </div>
@@ -6016,7 +6185,7 @@ ${!sourceEditorEnabled ? `
     </select>
   </div>
   <div class="row">
-    <div><div class="label">Show Forecast Strip</div></div>
+    <div><div class="label">Show Forecast</div><div class="sublabel">Forecast strip, or forecast button in compact mode</div></div>
     ${this._toggle('show_forecast', this._val('show_forecast', true))}
   </div>
   <div class="row">
@@ -6038,6 +6207,10 @@ ${!sourceEditorEnabled ? `
 <!-- GLOBAL DISPLAY -->
 <div class="section">
   <div class="section-title">Global Display</div>
+  <div class="row">
+    <div><div class="label">Compact Mode</div><div class="sublabel">Show current weather only; open the forecast with a button</div></div>
+    ${this._toggle('compact_mode', _boolConfigValue(this._val('compact_mode', false), false))}
+  </div>
   <div class="row">
     <div><div class="label">Display Unit</div><div class="sublabel">Card converts automatically from entity unit</div></div>
     <select id="temperature_unit">
@@ -6345,6 +6518,7 @@ ${!sourceEditorEnabled ? `
         max_items: Number.isFinite(maxItemsValue) ? maxItemsValue : (this._config.max_items || 5),
         language: this.shadowRoot.getElementById('language')?.value || 'en',
         show_forecast: showForecast,
+        compact_mode: getChecked('compact_mode', _boolConfigValue(this._config.compact_mode, false)),
         show_details: sr.getElementById('show_details')
           ? getChecked('show_details', true)
           : (this._config.show_details !== false),
