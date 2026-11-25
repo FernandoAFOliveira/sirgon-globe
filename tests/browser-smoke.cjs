@@ -8,11 +8,11 @@ async function main() {
   const script = readFileSync(join(__dirname, '..', 'sirgon-globe.js'));
   const server = createServer((req, res) => {
     if (req.url === '/sirgon-globe.js') {
-      res.writeHead(200, { 'Content-Type': 'text/javascript' });
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       res.end(script);
     } else {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<!doctype html><html><body><script src="/sirgon-globe.js"></script></body></html>');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<!doctype html><html><head><meta charset="utf-8"></head><body><script src="/sirgon-globe.js"></script></body></html>');
     }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
